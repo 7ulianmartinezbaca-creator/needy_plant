@@ -87,7 +87,7 @@ void setup() {
   }
   mqtt.subscribe(&subFeed);
 
-  checktimer.startTimer(15000);
+  checktimer.startTimer(1000);
 }
 
 void loop() {
@@ -97,22 +97,24 @@ void loop() {
   moistureRead = analogRead(D13);
 
  if (checktimer.isTimerReady()){
-    waterPlant();
+     waterPlant();
   }
-
+ if (watertimer.isTimerReady()){
+    digitalWrite(D19,LOW);
+    }
   quality = sensor.slope();
 
   if (quality == AirQualitySensor::FORCE_SIGNAL) {
-    Serial.printf("High pollution! Force signal active.\n");
+    
   } 
   else if (quality == AirQualitySensor::HIGH_POLLUTION) {
-    Serial.printf("High pollution!\n");
+    
   } 
   else if (quality == AirQualitySensor::LOW_POLLUTION) {
-    Serial.printf("Low pollution!\n");
+    
   } 
   else if (quality == AirQualitySensor::FRESH_AIR) {
-    Serial.printf("Fresh air.\n");
+    
 
   }
   tempC = bme.readTemperature();
@@ -137,7 +139,7 @@ void loop() {
         digitalWrite(D19,subval);
     }
   }
-  
+
   displayTimer.startTimer(15000);
 
   if ((millis() - lastTime > 10000)) {
@@ -192,10 +194,8 @@ void waterPlant() {
     
     if (moistureRead > 2000){
       digitalWrite(D19,HIGH);
-      watertimer.startTimer(500);
-      checktimer.startTimer(10000);
+      watertimer.startTimer(1000);
+      checktimer.startTimer(500);
     }  
-    if (watertimer.isTimerReady()){
-    digitalWrite(D19,LOW);
-}
+    checktimer.startTimer(1000);
 }
