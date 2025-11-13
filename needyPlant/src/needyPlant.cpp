@@ -9,8 +9,9 @@
 // Include Particle Device OS APIs
 #include "Particle.h"
 #include "IoTClassroom_CNM.h"
+#include "IoTTimer.h"
 #include "adafruit_BME280.h"
-#include "Grove_Air_Quality_Sensor.h"
+#include "Air_Quality_Sensor.h"
 #include "Adafruit_SSD1306.h"
 #include "Adafruit_GFX.h"
 #include <Adafruit_MQTT.h>
@@ -20,13 +21,15 @@
 
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
-SYSTEM_THREAD(DISABLED);
-
 TCPClient TheClient;
 
 Adafruit_MQTT_SPARK mqtt(&TheClient,AIO_SERVER,AIO_SEVERPORT,AIO_USERNAME,AIO_KEY);
-Adafruit_MQTT_Subscribe subFeed = Adafruit_MQTT_Subscribe (&mqtt, AIO_USERNAME "/feeds/");
-Adafruit_MQTT_Publish pubFeed = Adafruit_MQTT_Publish (&mqtt, AIO_USERNAME "/feeds/");
+Adafruit_MQTT_Subscribe subFeed = Adafruit_MQTT_Subscribe (&mqtt, AIO_USERNAME "/feeds/water");
+Adafruit_MQTT_Publish airqual = Adafruit_MQTT_Publish (&mqtt, AIO_USERNAME "/feeds/air_quality");
+Adafruit_MQTT_Publish moistval = Adafruit_MQTT_Publish (&mqtt, AIO_USERNAME "/feeds/moisture");
+Adafruit_MQTT_Publish tempeture = Adafruit_MQTT_Publish (&mqtt, AIO_USERNAME "/feeds/");
+
+
 
 const int OLED_RESET=-1;
 
@@ -34,6 +37,7 @@ int status;
 int moistureRead;
 int subval;
 int pubval;
+int quality;
 
 unsigned int last, lastTime;
 
@@ -44,11 +48,16 @@ float inHg;
 float humidRh;
 float pascal = 3386.39; 
 
+IoTTimer checktimer;
+IoTTimer displayTimer;
+IoTTimer watertimer;
+
 AirQualitySensor sensor (D11);
 
 Adafruit_BME280 bme;
 Adafruit_SSD1306 display(OLED_RESET);
 
+void waterPlant();
 void MQTT_connect();
 bool MQTT_ping();
 
@@ -62,10 +71,10 @@ void setup() {
   }
 
   pinMode(D13,INPUT); //capastive sensor 
-  pinMode(D15,OUTPUT); //waterpump
+  pinMode(D19,OUTPUT); //waterpump
 
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C); // initalization OLED
-  display.setTextSize(1.5);
+  display.setTextSize(1);
   display.setTextColor(WHITE);
   display.display();
   display.clearDisplay();
@@ -77,28 +86,35 @@ void setup() {
     Serial.printf(".");
   }
   mqtt.subscribe(&subFeed);
+
+  checktimer.startTimer(15000);
 }
 
 void loop() {
   MQTT_connect();
   MQTT_ping();
 
-  Adafruit_MQTT_Subscribe* subscription;
-  while ((subscription = mqtt.readSubscription(10000))) {
-    if (subscription == &subFeed) {
-        subval = atoi((char *)subFeed.lastread);
-    }
-  }
-
-  if ((millis() - lastTime > 10000)) {
-    if (mqtt.Update()) {
-        //pubFeed.publish();
-    }
-    lastTime = millis();
-  }
-
   moistureRead = analogRead(D13);
-    
+
+ if (checktimer.isTimerReady()){
+    waterPlant();
+  }
+
+  quality = sensor.slope();
+
+  if (quality == AirQualitySensor::FORCE_SIGNAL) {
+    Serial.printf("High pollution! Force signal active.\n");
+  } 
+  else if (quality == AirQualitySensor::HIGH_POLLUTION) {
+    Serial.printf("High pollution!\n");
+  } 
+  else if (quality == AirQualitySensor::LOW_POLLUTION) {
+    Serial.printf("Low pollution!\n");
+  } 
+  else if (quality == AirQualitySensor::FRESH_AIR) {
+    Serial.printf("Fresh air.\n");
+
+  }
   tempC = bme.readTemperature();
   pressPa = bme.readPressure();
   humidRh = bme.readHumidity();
@@ -106,9 +122,33 @@ void loop() {
   tempF = 9/5.0 * tempC + 32;
   display.clearDisplay();
   display.setCursor(0,0);
-  display.printf("Temp in Room %0.2f\nPressure of Room %0.2f\nHumity of Room %0.2f\n",tempF,inHg,humidRh);
-//   Serial.printf("Temp in Room %0.2f\nPressure of Room %0.2f\nHumity of Room %0.2f\n",tempF,inHg,humidRH);
-  display.display();
+
+  if (displayTimer.isTimerReady()) {
+    display.printf("Temp %0.2f\nPressure %0.2f\nHumity %0.2f\nMoisture %i\n",tempF,inHg,humidRh,moistureRead);
+    display.display();
+    displayTimer.startTimer(15000);
+  }
+
+
+  Adafruit_MQTT_Subscribe* subscription;
+  while ((subscription = mqtt.readSubscription(10000))) {
+    if (subscription == &subFeed) {
+        subval = atoi((char *)subFeed.lastread);
+        digitalWrite(D19,subval);
+    }
+  }
+  
+  displayTimer.startTimer(15000);
+
+  if ((millis() - lastTime > 10000)) {
+    if (mqtt.Update()) {
+      airqual.publish(quality);
+      moistval.publish(moistureRead);
+      tempeture.publish(tempF);
+        
+    }
+    lastTime = millis();
+    }
 }
 
 // Function to connect and reconnect as necessary to the MQTT server.
@@ -146,4 +186,16 @@ bool MQTT_ping() {
       last = millis();
   }
   return pingStatus;
+}
+
+void waterPlant() {
+    
+    if (moistureRead > 2000){
+      digitalWrite(D19,HIGH);
+      watertimer.startTimer(500);
+      checktimer.startTimer(10000);
+    }  
+    if (watertimer.isTimerReady()){
+    digitalWrite(D19,LOW);
+}
 }
