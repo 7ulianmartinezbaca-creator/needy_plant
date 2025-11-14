@@ -87,7 +87,9 @@ void setup() {
   }
   mqtt.subscribe(&subFeed);
 
-  checktimer.startTimer(1000);
+  checktimer.startTimer(0);
+
+    displayTimer.startTimer(5000);
 }
 
 void loop() {
@@ -98,24 +100,21 @@ void loop() {
 
  if (checktimer.isTimerReady()){
      waterPlant();
+     watertimer.startTimer(1000);
   }
+
  if (watertimer.isTimerReady()){
     digitalWrite(D19,LOW);
     }
   quality = sensor.slope();
 
   if (quality == AirQualitySensor::FORCE_SIGNAL) {
-    
   } 
   else if (quality == AirQualitySensor::HIGH_POLLUTION) {
-    
   } 
   else if (quality == AirQualitySensor::LOW_POLLUTION) {
-    
   } 
   else if (quality == AirQualitySensor::FRESH_AIR) {
-    
-
   }
   tempC = bme.readTemperature();
   pressPa = bme.readPressure();
@@ -133,14 +132,13 @@ void loop() {
 
 
   Adafruit_MQTT_Subscribe* subscription;
-  while ((subscription = mqtt.readSubscription(10000))) {
+  while ((subscription = mqtt.readSubscription(10))) {
     if (subscription == &subFeed) {
         subval = atoi((char *)subFeed.lastread);
         digitalWrite(D19,subval);
     }
   }
 
-  displayTimer.startTimer(15000);
 
   if ((millis() - lastTime > 10000)) {
     if (mqtt.Update()) {
@@ -151,6 +149,7 @@ void loop() {
     }
     lastTime = millis();
     }
+
 }
 
 // Function to connect and reconnect as necessary to the MQTT server.
@@ -194,8 +193,6 @@ void waterPlant() {
     
     if (moistureRead > 2000){
       digitalWrite(D19,HIGH);
-      watertimer.startTimer(1000);
-      checktimer.startTimer(500);
+      checktimer.startTimer(30000);
     }  
-    checktimer.startTimer(1000);
 }
